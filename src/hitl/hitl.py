@@ -65,32 +65,44 @@ class ConfidenceRouter:
         Returns:
             RoutingDecision with routing action and metadata
         """
-        # TODO 12: Implement routing logic
-        #
-        # 1. Check if action_type is in HIGH_RISK_ACTIONS
-        #    -> If yes: always escalate (action="escalate", priority="high",
-        #       requires_human=True, reason="High-risk action: {action_type}")
-        #
-        # 2. Check confidence thresholds:
-        #    - confidence >= 0.9:
-        #      action="auto_send", priority="low",
-        #      requires_human=False, reason="High confidence"
-        #
-        #    - 0.7 <= confidence < 0.9:
-        #      action="queue_review", priority="normal",
-        #      requires_human=True, reason="Medium confidence — needs review"
-        #
-        #    - confidence < 0.7:
-        #      action="escalate", priority="high",
-        #      requires_human=True, reason="Low confidence — escalating"
+        # 1. High-risk action — always escalate
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                reason=f"High-risk action: {action_type}",
+                priority="high",
+                requires_human=True,
+            )
 
+        # 2. High confidence — auto-send
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision(
+                action="auto_send",
+                confidence=confidence,
+                reason="High confidence",
+                priority="low",
+                requires_human=False,
+            )
+
+        # 3. Medium confidence — queue for review
+        if confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision(
+                action="queue_review",
+                confidence=confidence,
+                reason="Medium confidence — needs review",
+                priority="normal",
+                requires_human=True,
+            )
+
+        # 4. Low confidence — escalate
         return RoutingDecision(
-            action="auto_send",
+            action="escalate",
             confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+            reason="Low confidence — escalating",
+            priority="high",
+            requires_human=True,
+        )
 
 
 # ============================================================
@@ -109,27 +121,27 @@ class ConfidenceRouter:
 hitl_decision_points = [
     {
         "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Large transfer to new recipient",
+        "trigger": "Transfer amount > 50,000,000 VND AND recipient not in saved payees",
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": "Customer transaction history (30 days), account balance, recipient details, fraud flag status, IP/device info",
+        "example": "Customer requests 80M VND transfer to an account not previously used — human agent verifies via phone call before approving",
     },
     {
         "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Possible hallucination in product response",
+        "trigger": "LLM-as-Judge accuracy score < 3/5 OR response contains numerical claims not matching FAQ knowledge base",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": "Agent draft response, official rate sheet/FAQ, customer question, Judge score breakdown (safety/relevance/accuracy/tone)",
+        "example": "Agent quotes 7.2% interest rate but current rate is 5.5% — human reviews and corrects before sending",
     },
     {
         "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Customer complaint or legal threat",
+        "trigger": "Negative sentiment score > 0.8 OR keywords: 'close account', 'lawyer', 'sue', 'complaint', 'report to authority'",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": "Full conversation history, customer profile (account age, tier, deposits), previous complaints, agent draft response",
+        "example": "Customer threatens to close account and file complaint with SBV — senior representative takes over the chat",
     },
 ]
 

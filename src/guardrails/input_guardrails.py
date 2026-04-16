@@ -38,13 +38,31 @@ def detect_injection(user_input: str) -> bool:
         True if injection detected, False otherwise
     """
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        r"ignore (all )?(previous|above|prior) instructions",
+        r"you are now",
+        r"system prompt",
+        r"reveal your (instructions|prompt|config)",
+        r"pretend you are",
+        r"act as (a |an )?unrestricted",
+        r"forget (all |your )?(instructions|rules|guidelines)",
+        r"override (safety|security) protocols",
+        r"disregard (all )?(previous|prior|your)",
+        r"bo qua (moi |tat ca )?(huong dan|chi thi|quy tac)",
+        r"mat khau (admin|he thong|root)",
+        r"translate.*(system|instructions|prompt).*(json|xml|yaml)",
+        r"export.*(config|system|prompt|instruction)",
+        r"fill in.*(password|key|secret|credential)",
+        r"\bDAN\b",
+        r"(admin|root)\s*(password|credential|access)",
+        r"api[_\s]?key",
+        r"connection\s*string",
+        r"(show|give|tell|provide).*(password|secret|key|credential|token)",
+        r"SELECT\s+\S+\s+FROM",
     ]
 
+    # re.DOTALL lets .* match newlines in multiline attack prompts
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, user_input, re.IGNORECASE):
+        if re.search(pattern, user_input, re.IGNORECASE | re.DOTALL):
             return True
     return False
 
@@ -70,12 +88,20 @@ def topic_filter(user_input: str) -> bool:
     """
     input_lower = user_input.lower()
 
-    # TODO: Implement logic:
-    # 1. If input contains any blocked topic -> return True
-    # 2. If input doesn't contain any allowed topic -> return True
-    # 3. Otherwise -> return False (allow)
+    input_lower = user_input.lower()
 
-    pass  # Replace with your implementation
+    # 1. Block immediately if dangerous topic detected
+    for topic in BLOCKED_TOPICS:
+        if topic in input_lower:
+            return True
+
+    # 2. Allow if any banking topic is found
+    for topic in ALLOWED_TOPICS:
+        if topic in input_lower:
+            return False
+
+    # 3. No allowed topic found — off-topic
+    return True
 
 
 # ============================================================
@@ -128,14 +154,36 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         self.total_count += 1
         text = self._extract_text(user_message)
 
-        # TODO: Implement logic:
-        # 1. Call detect_injection(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 3. If both are False: return None (let message through)
+        # Guard: empty input
+        if not text.strip():
+            self.blocked_count += 1
+            return self._block_response("Please enter a question about VinBank services.")
 
-        pass  # Replace with your implementation
+        # Guard: input too long (> 2000 chars)
+        if len(text) > 2000:
+            self.blocked_count += 1
+            return self._block_response(
+                "Your message is too long. Please keep questions under 2000 characters."
+            )
+
+        # 1. Injection detection
+        if detect_injection(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "I cannot process this request. It appears to contain a prompt injection attempt. "
+                "Please ask a banking-related question."
+            )
+
+        # 2. Topic filter
+        if topic_filter(text):
+            self.blocked_count += 1
+            return self._block_response(
+                "I can only assist with banking-related questions (accounts, transfers, "
+                "loans, interest rates, etc.). Please ask a banking question."
+            )
+
+        # 3. Safe — let through
+        return None
 
 
 # ============================================================
